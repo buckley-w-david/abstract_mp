@@ -13,11 +13,14 @@ import click
 import importlib
 
 
-class Map:
+class MapReduceError(Exception):
+    pass
 
-    @staticmethod
-    def from_spec(spec: typing.Dict) -> 'Map':
-        pass
+
+class InvalidResourceError(MapReduceError):
+    pass
+
+
 
 
 class ResourceInjestor(typing.Protocol):
@@ -37,9 +40,8 @@ class FileResourceInjestor:
         self.extras = extra
 
     def injest(self) -> str:
-        with open(self.filename, 'r', **self.extras) as file:
-            contents = file.read()
-        return contents
+        return open(self.filename, 'r', **self.extras)
+
 
 class ModuleResourceInjestor:
 
@@ -72,7 +74,11 @@ class Resource:
 
     @staticmethod
     def from_spec(id: int, spec: typing.Dict) -> 'Resource':
-        resource_type = ResourceType[spec.get('type', 'file').strip().upper()]
+        try:
+            resource_type = ResourceType[spec.get('type', 'file').strip().upper()]
+        except KeyError as exc:
+            raise InvalidResourceError(f"{spec.get("type")} is not a valid resource type") from exc
+
         name = spec.get('name', 'default')
         extras: typing.Dict = spec.get('extra', {})
 
@@ -83,21 +89,98 @@ class Resource:
         return Resource(id, resource_type, content)
 
 
-class MapRequest():
+# I guess these are effectivly just closures
+class Invoker(typing.Protocol):
 
-    def __init__(self, mappings: typing.List[Map], resources: typing.List[Resource]) -> None:
-        self.mappings = mappings
-        self.resources = resources
-
-    def apply(self, csv: typing.Iterable[typing.Dict]) -> typing.Iterator[typing.List[str]]:
+    def __init__(self, target, resource, apply) -> None:
         pass
+
+    def __call__(self, row: typing.List[str]) -> str:
+        pass
+
+
+class BuiltinFunctionInvoker:
+
+    def __init__(self, target, resource, apply) -> None:
+        pass
+
+    def __call__(self, row: typing.List[str]) -> str:
+        pass
+
+
+class BuiltinMethodInvoker:
+
+    def __init__(self, target, resource, apply) -> None:
+        pass
+
+    def __call__(self, row: typing.List[str]) -> str:
+        pass
+
+
+class ResourceMethodInvoker:
+
+    def __init__(self, target, resource, apply) -> None:
+        pass
+
+    def __call__(self, row: typing.List[str]) -> str:
+        pass
+
+
+@enum.unique
+class ApplyType(enum.Enum):
+    BUILTIN_FUNCTION = enum.auto()
+    BUILTIN_METHOD = enum.auto()
+    RESOURCE_METHOD = enum.auto()
+
+
+invoke_map: typing.Dict[ApplyType, typing.Type[Invoker]] = {
+    ApplyType.BUILTIN_FUNCTION: FileResourceInjestor,
+    ApplyType.BUILTIN_METHOD: ModuleResourceInjestor,
+}
+
+class ValueMap:
+
+    def __init__(self, invoke: typing.Callable) -> None:
+        self.invoke = invoke
+
+    def __call__(row: typing.List[str]) -> str:
+        return self.invoke(row)
+
+    @staticmethod
+    def from_spec(spec: typing.Dict, resources: typing.Dict[int, Resource]) -> 'Map':
+        required_resources = spec.get('uses', [])
+        resources = [resources.get(resource) for resource in required_resources]
+        resources = resources
+        target = spec.get('target', 0)
+        apply = spec.get('apply')
+        if not apply:
+            self.invoke = lambda *args: *args
+
+        try:
+            type = ApplyType[apply.get('type', 'builtin-function').replace('-', '_').upper()]
+        except KeyError as exc:
+            raise ApplyTypeError(f"{apply.get('type')} is not a valid apply type")
+
+        invoker = invoke_map[type]
+        invoke = invoker(target, resource, apply)
+        return ValueMap(invoke)
+
+
+class CSVMapper():
+
+    def __init__(self, mappings: typing.List[Map]) -> None:
+        self.mappings = mappings
+
+    def apply(self, csv: typing.Iterable[typing.List[str]]) -> typing.Iterator[typing.List[str]]:
+        for row in csv:
+            yield [mapping.apply(row) for mapping in self.mappings]
 
     @staticmethod
     def from_mapfile(self, mapfile: typing.Dict) -> 'MapRequest':
-        maps = [Map.from_spec(spec) for spec in mapfile.get('maps', [])]
         resources = mapfile.get('resources', {})
         resources = [Resource.from_spec(id, resources[id]) for id in resources]
-        return MapRequest(maps, resources)
+        maps = [Map.from_spec(spec, resources) for spec in mapfile.get('maps', [])]
+        return MapRequest(maps)
 
 
 @click.group()
