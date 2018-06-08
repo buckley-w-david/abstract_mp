@@ -163,7 +163,7 @@ class ValueMap:
         target = spec.get('target', 0)
         apply = spec.get('apply')
         if not apply:
-            self.invoke = lambda *args: args
+            return ValueMap(lambda *args: args)
 
         try:
             type = ApplyType[apply.get('type', 'builtin-function').replace('-', '_').upper()]
@@ -177,7 +177,7 @@ class ValueMap:
 
 class CSVMapper():
 
-    def __init__(self, mappings: typing.List[ValueMap]) -> None:
+    def __init__(self, mappings: typing.List[typing.Callable]) -> None:
         self.mappings = mappings
 
     def apply(self, csv: typing.Iterable[typing.List[str]]) -> typing.Iterator[typing.List[str]]:
