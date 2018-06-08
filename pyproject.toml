@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "csv-transform"
+version = "0.1.0"
+description = "CSV Transformation library"
+authors = ["David Buckley <buckley.w.david@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+python-levenshtein = "^0.12.0"
+typing_extensions = "^3.6"
+click = "^6.7"
+
+[tool.poetry.dev-dependencies]
+pytest = "^3.6"
+mypy = "^0.600.0"
+pytest-cov = "^2.5"
+pylint = "^1.9"
+
+[tool.poetry.scripts]
+map = "csv_transform:cli.map"
