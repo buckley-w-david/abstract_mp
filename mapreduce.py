@@ -21,8 +21,6 @@ class InvalidResourceError(MapReduceError):
     pass
 
 
-
-
 class ResourceInjestor(typing.Protocol):
 
     def __init__(self, name: str, options: typing.Dict) -> None:
@@ -134,8 +132,8 @@ class ApplyType(enum.Enum):
 
 
 invoke_map: typing.Dict[ApplyType, typing.Type[Invoker]] = {
-    ApplyType.BUILTIN_FUNCTION: FileResourceInjestor,
-    ApplyType.BUILTIN_METHOD: ModuleResourceInjestor,
+    ApplyType.BUILTIN_FUNCTION: BuiltinFunctionInvoker,
+    ApplyType.BUILTIN_METHOD: BuiltingMethodInvoker,
 }
 
 class ValueMap:
@@ -186,6 +184,7 @@ class CSVMapper():
 @click.group()
 def main() -> None:
     pass
+
 
 @main.command()
 @click.argument('mapfile', type=click.File('r', encoding='utf-8-sig'), nargs=-1)
