@@ -1,0 +1,25 @@
+{
+    "maps": [
+        {
+            "type": "valueMap",
+            "target": 0,
+            "apply": {
+                "type": "builtin-method",
+                "source": "str",
+                "name": "upper",
+                "args": {}
+            }
+        }, {
+            "type": "valueMap",
+            "target": 4,
+            "apply": {
+                "type": "builtin-method",
+                "source": "str",
+                "name": "lower",
+                "args": {}
+            }
+        }
+ 
+    ], "resources": {
+    }
+}

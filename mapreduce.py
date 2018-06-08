@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import csv
 import enum
+import json
 import Levenshtein
 import logging
 import itertools
@@ -20,8 +21,11 @@ class MapReduceError(Exception):
 class InvalidResourceError(MapReduceError):
     pass
 
+class ApplyTypeError(MapReduceError):
+    pass
 
-class ResourceInjestor(typing.Protocol):
+
+class ResourceInjestor(typing_extensions.Protocol):
 
     def __init__(self, name: str, options: typing.Dict) -> None:
         pass
@@ -75,7 +79,7 @@ class Resource:
         try:
             resource_type = ResourceType[spec.get('type', 'file').strip().upper()]
         except KeyError as exc:
-            raise InvalidResourceError(f"{spec.get("type")} is not a valid resource type") from exc
+            raise InvalidResourceError(f"{spec.get('type')} is not a valid resource type") from exc
 
         name = spec.get('name', 'default')
         extras: typing.Dict = spec.get('extra', {})
@@ -88,7 +92,7 @@ class Resource:
 
 
 # I guess these are effectivly just closures
-class Invoker(typing.Protocol):
+class Invoker(typing_extensions.Protocol):
 
     def __init__(self, target, resource, apply) -> None:
         pass
@@ -114,7 +118,7 @@ class BuiltinMethodInvoker:
     def __init__(self, target, resource, apply) -> None:
         source = apply.get('source')
         name = apply.get('name')
-        self.func = getattr(name, getattr(globals()['__builtins__'], source))
+        self.func = getattr(getattr(globals()['__builtins__'], source), name)
         self.args = apply.get('args')
         self.target = target
 
@@ -140,7 +144,7 @@ class ApplyType(enum.Enum):
 
 invoke_map: typing.Dict[ApplyType, typing.Type[Invoker]] = {
     ApplyType.BUILTIN_FUNCTION: BuiltinFunctionInvoker,
-    ApplyType.BUILTIN_METHOD: BuiltingMethodInvoker,
+    ApplyType.BUILTIN_METHOD: BuiltinMethodInvoker,
 }
 
 class ValueMap:
@@ -148,7 +152,7 @@ class ValueMap:
     def __init__(self, invoke: typing.Callable) -> None:
         self.invoke = invoke
 
-    def __call__(row: typing.List[str]) -> str:
+    def __call__(self, row: typing.List[str]) -> str:
         return self.invoke(row)
 
     @staticmethod
@@ -159,7 +163,7 @@ class ValueMap:
         target = spec.get('target', 0)
         apply = spec.get('apply')
         if not apply:
-            self.invoke = lambda *args: *args
+            self.invoke = lambda *args: args
 
         try:
             type = ApplyType[apply.get('type', 'builtin-function').replace('-', '_').upper()]
@@ -167,38 +171,39 @@ class ValueMap:
             raise ApplyTypeError(f"{apply.get('type')} is not a valid apply type")
 
         invoker = invoke_map[type]
-        invoke = invoker(target, resource, apply)
+        invoke = invoker(target, resources, apply)
         return ValueMap(invoke)
 
 
 class CSVMapper():
 
-    def __init__(self, mappings: typing.List[Map]) -> None:
+    def __init__(self, mappings: typing.List[ValueMap]) -> None:
         self.mappings = mappings
 
     def apply(self, csv: typing.Iterable[typing.List[str]]) -> typing.Iterator[typing.List[str]]:
         for row in csv:
-            yield [mapping.apply(row) for mapping in self.mappings]
+            yield [mapping(row) for mapping in self.mappings]
 
     @staticmethod
-    def from_mapfile(self, mapfile: typing.Dict) -> 'MapRequest':
+    def from_mapfile(mapfile: typing.Dict) -> 'MapRequest':
         resources = mapfile.get('resources', {})
         resources = [Resource.from_spec(id, resources[id]) for id in resources]
-        maps = [Map.from_spec(spec, resources) for spec in mapfile.get('maps', [])]
-        return MapRequest(maps)
+        maps = [ValueMap.from_spec(spec, resources) for spec in mapfile.get('maps', [])]
+        return CSVMapper(maps)
 
 
-@click.group()
-def main() -> None:
-    pass
-
-
-@main.command()
-@click.argument('mapfile', type=click.File('r', encoding='utf-8-sig'), nargs=-1)
-@click.argument('reducefile', type=click.File('r', encoding='utf-8-sig'))
-def mapreduce(mapfile: typing.List[typing.IO[str]], reducefile: typing.IO[str]) -> None:
-    pass
+@click.command()
+@click.argument('mapfile', type=click.File('r', encoding='utf-8-sig'))
+@click.argument('input', type=click.Path(exists=True))
+@click.argument('encoding', type=str, default='utf-8-sig')
+def map(mapfile: typing.IO[str], input: str, encoding: str) -> None:
+    with open(input, 'r', newline='', encoding=encoding) as file:
+        mapper = CSVMapper.from_mapfile(json.load(mapfile))
+        reader = csv.reader(file)
+        next(reader)
+        for row in mapper.apply(reader):
+            print(row)
 
 
 if __name__ == '__main__':
-    main()
+    map()
