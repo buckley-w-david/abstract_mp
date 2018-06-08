@@ -100,19 +100,26 @@ class Invoker(typing.Protocol):
 class BuiltinFunctionInvoker:
 
     def __init__(self, target, resource, apply) -> None:
-        pass
+        name = apply.get('name')
+        self.func = getattr(globals()['__builtins__'], name)
+        self.target = target
+        self.args = apply.get('args')
 
     def __call__(self, row: typing.List[str]) -> str:
-        pass
+        self.func(row[self.target], **self.args)
 
 
 class BuiltinMethodInvoker:
 
     def __init__(self, target, resource, apply) -> None:
-        pass
+        source = apply.get('source')
+        name = apply.get('name')
+        self.func = getattr(name, getattr(globals()['__builtins__'], source))
+        self.args = apply.get('args')
+        self.target = target
 
-    def __call__(self, row: typing.List[str]) -> str:
-        pass
+    def __call__(self, row: typing.List[str]) -> typing.Any:
+        return self.func(row[self.target], **self.args)
 
 
 class ResourceMethodInvoker:
